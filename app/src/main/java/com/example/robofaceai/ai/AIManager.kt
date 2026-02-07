@@ -25,6 +25,10 @@ class AIManager(context: Context) {
     private val _aiEvent = MutableStateFlow<RoboEvent.AIResult?>(null)
     val aiEvent: StateFlow<RoboEvent.AIResult?> = _aiEvent.asStateFlow()
 
+    // Prediction flow for ViewModel
+    private val _predictions = MutableStateFlow("")
+    val predictions: StateFlow<String> = _predictions.asStateFlow()
+
     // Inference stats for display
     private val _inferenceStats = MutableStateFlow(InferenceStats())
     val inferenceStats: StateFlow<InferenceStats> = _inferenceStats.asStateFlow()
@@ -83,6 +87,13 @@ class AIManager(context: Context) {
     }
 
     /**
+     * Add sensor reading to buffer (alias for compatibility)
+     */
+    fun feedSensorData(x: Float, y: Float, z: Float) {
+        addSensorData(x, y, z)
+    }
+
+    /**
      * Add sensor reading to buffer
      */
     fun addSensorData(x: Float, y: Float, z: Float) {
@@ -96,6 +107,13 @@ class AIManager(context: Context) {
                 sensorBuffer.removeAt(0)
             }
         }
+    }
+
+    /**
+     * Get current stats
+     */
+    fun getStats(): InferenceStats {
+        return _inferenceStats.value
     }
 
     /**
@@ -120,8 +138,12 @@ class AIManager(context: Context) {
             inferenceCount = currentStats.inferenceCount + 1
         )
 
+        // Emit prediction to flow
+        _predictions.value = result.prediction
+
         // Emit AI event if confidence is high enough
-        if (result.confidence > 0.6f) {
+        // IMPORTANT: Don't emit "sleep" predictions to prevent unwanted state changes
+        if (result.confidence > 0.7f && result.prediction != "sleep") {
             _aiEvent.value = RoboEvent.AIResult(result.prediction, result.confidence)
         }
     }

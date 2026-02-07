@@ -7,8 +7,30 @@ import kotlin.math.abs
 import kotlin.math.sin
 
 /**
- * Animation utilities for the Robo Face.
- * All animations are state-driven and parameterized.
+ * TASK 2: State-Driven Animation Logic (AIMER Society Internship Challenge)
+ *
+ * ARCHITECTURE PATTERN:
+ * This file implements the "Animation Engine" for the Robo Face.
+ * All visual behaviors are PURE FUNCTIONS that map:
+ *   (RoboState, Time) → Visual Property
+ *
+ * BENEFITS OF THIS APPROACH:
+ * 1. Testability: Pure functions with no side effects
+ * 2. Centralization: All animation logic in one place
+ * 3. Extensibility: Add new states without touching rendering code
+ * 4. Reusability: Functions can be used across multiple components
+ *
+ * STATE-DRIVEN BEHAVIORS:
+ * - Idle    → Slow pulse, gentle breathing, cyan
+ * - Curious → Medium pulse with rotation, purple
+ * - Happy   → Fast bounce, bright glow, green
+ * - Angry   → Sharp flicker, aggressive motion, red
+ * - Sleep   → Dimmed, minimal animation, gray
+ *
+ * NO HARDCODED VISUALS:
+ * Drawing functions in RoboCanvas.kt call these functions to get
+ * animation values. This ensures visual behavior is driven by state,
+ * not hardcoded in rendering code.
  */
 object RoboAnimations {
 

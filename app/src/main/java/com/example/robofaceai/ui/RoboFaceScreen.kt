@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -19,30 +20,45 @@ import com.example.robofaceai.domain.RoboState
 import com.example.robofaceai.viewmodel.RoboViewModel
 
 /**
- * Main screen displaying the Robo Face with controls.
- * This is the entry point for the UI.
+ * Main screen displaying the Robo Face with sensor-driven interaction.
+ *
+ * TASK 2 & 3 Integration:
+ * - Displays native vector Robo Face (Task 2)
+ * - Real-time sensor fusion for eye tracking (Task 3)
+ * - State machine integration
+ * - AI stats overlay
  */
 @Composable
 fun RoboFaceScreen(
-    viewModel: RoboViewModel = viewModel(),
-    tiltX: Float = 0f,
-    tiltY: Float = 0f,
-    aiStats: AIManager.InferenceStats = AIManager.InferenceStats(),
+    viewModel: RoboViewModel? = null,
     modifier: Modifier = Modifier
 ) {
-    val currentState by viewModel.state.collectAsState()
-    val stateName by viewModel.stateName.collectAsState()
+    // Get ViewModel (either passed in or create new one)
+    val vm = viewModel ?: androidx.lifecycle.viewmodel.compose.viewModel<RoboViewModel>()
+
+    // Collect state from ViewModel
+    val currentState by vm.state.collectAsState()
+    val stateName by vm.stateName.collectAsState()
+
+    // === TASK 3: Collect sensor values from ViewModel ===
+    val tiltX by vm.tiltX.collectAsState()
+    val tiltY by vm.tiltY.collectAsState()
+    val headRotation by vm.headRotation.collectAsState()
+
+    // Collect AI stats
+    val aiStats by vm.aiStats.collectAsState()
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Main Robo Face Canvas
-        RoboCanvas(
+        // Main Robo Face Canvas (TASK 2 + 3: Vector graphics with sensor interaction)
+        RoboFaceCanvas(
             state = currentState,
-            tiltX = tiltX,
-            tiltY = tiltY,
+            tiltX = tiltX,           // Sensor-driven eye movement
+            tiltY = tiltY,           // Sensor-driven eye movement
+            headRotation = headRotation, // Gyroscope head tilt
             modifier = Modifier.fillMaxSize()
         )
 
@@ -62,9 +78,19 @@ fun RoboFaceScreen(
                 .padding(top = 32.dp, end = 16.dp)
         )
 
+        // === SENSOR DEBUG OVERLAY (Top Left) - Shows real-time sensor values ===
+        SensorDebugDisplay(
+            tiltX = tiltX,
+            tiltY = tiltY,
+            headRotation = headRotation,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 32.dp, start = 16.dp)
+        )
+
         // Test controls (bottom) - for development/demo
         TestControls(
-            viewModel = viewModel,
+            viewModel = vm,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp)
@@ -133,6 +159,53 @@ private fun AIStatsDisplay(
         Text(
             text = "Engine: Rule-Based AI",
             color = if (stats.isModelLoaded) Color.Green else Color.Cyan,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/**
+ * Display real-time sensor values for debugging
+ */
+@Composable
+private fun SensorDebugDisplay(
+    tiltX: Float,
+    tiltY: Float,
+    headRotation: Float,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.7f))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = "SENSORS",
+            color = Color.Green,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Tilt X: ${"%.2f".format(tiltX)}",
+            color = if (kotlin.math.abs(tiltX) > 0.1f) Color.Yellow else Color.White,
+            fontSize = 12.sp
+        )
+        Text(
+            text = "Tilt Y: ${"%.2f".format(tiltY)}",
+            color = if (kotlin.math.abs(tiltY) > 0.1f) Color.Yellow else Color.White,
+            fontSize = 12.sp
+        )
+        Text(
+            text = "Rotation: ${"%.1f".format(headRotation)}°",
+            color = if (kotlin.math.abs(headRotation) > 5f) Color.Yellow else Color.White,
+            fontSize = 12.sp
+        )
+        Text(
+            text = "🎯 ${if (kotlin.math.abs(tiltX) > 0.1f || kotlin.math.abs(tiltY) > 0.1f) "TRACKING" else "STABLE"}",
+            color = if (kotlin.math.abs(tiltX) > 0.1f || kotlin.math.abs(tiltY) > 0.1f) Color.Green else Color.Gray,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold
         )

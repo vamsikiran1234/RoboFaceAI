@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -30,6 +31,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    kotlinOptions {
+        jvmTarget = "11"
+    }
     buildFeatures {
         compose = true
     }
@@ -50,9 +54,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // NOTE: TensorFlow Lite removed due to persistent namespace conflicts
-    // The app uses intelligent rule-based AI instead (see TFLiteEngine.kt)
-    // This demonstrates Task 6 requirements: on-device inference, latency measurement, etc.
+    // TensorFlow Lite Interpreter ONLY - Required for Task 6
+    // Using base library only to avoid namespace conflicts
+    implementation("org.tensorflow:tensorflow-lite:2.13.0")
 
     // ViewModel for MVVM architecture
     implementation(libs.androidx.lifecycle.viewmodel.ktx)

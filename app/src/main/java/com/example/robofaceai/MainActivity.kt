@@ -1,98 +1,63 @@
 package com.example.robofaceai
 
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.robofaceai.ai.AIManager
-import com.example.robofaceai.sensors.SensorController
+import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.ViewModelProvider
 import com.example.robofaceai.ui.RoboFaceScreen
 import com.example.robofaceai.ui.theme.RoboFaceAITheme
 import com.example.robofaceai.viewmodel.RoboViewModel
 
+/**
+ * Main Activity - Entry point for RoboFaceAI
+ *
+ * TASK 2, 3, 6 Integration:
+ * - Initializes ViewModel with sensor fusion and AI
+ * - Sets up Compose UI with RoboFaceScreen
+ * - Manages lifecycle
+ */
 class MainActivity : ComponentActivity() {
 
-    private lateinit var sensorController: SensorController
-    private lateinit var aiManager: AIManager
+    private lateinit var viewModel: RoboViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Keep screen on for demo
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        android.util.Log.d("RoboFaceAI", "═══ RoboFaceAI Starting ═══")
 
-        // Initialize controllers
-        sensorController = SensorController(this)
-        aiManager = AIManager(this)
-        aiManager.initialize()
+        try {
+            // Initialize ViewModel (AndroidViewModel with Application context)
+            viewModel = ViewModelProvider(
+                this,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+            )[RoboViewModel::class.java]
 
-        // Connect sensor data to AI Manager
-        sensorController.onSensorDataCallback = { x, y, z ->
-            aiManager.addSensorData(x, y, z)
-        }
-
-        enableEdgeToEdge()
-        setContent {
-            RoboFaceAITheme {
-                val viewModel: RoboViewModel = viewModel()
-
-                // Collect sensor tilt values
-                val tiltX by sensorController.tiltX.collectAsState()
-                val tiltY by sensorController.tiltY.collectAsState()
-
-                // Collect AI inference stats
-                val aiStats by aiManager.inferenceStats.collectAsState()
-
-                // Connect sensor events to ViewModel
-                LaunchedEffect(Unit) {
-                    sensorController.roboEvent.collect { event ->
-                        event?.let { viewModel.handleEvent(it) }
-                    }
+            setContent {
+                RoboFaceAITheme {
+                    RoboFaceScreen(
+                        viewModel = viewModel,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                    )
                 }
-
-                // Connect AI events to ViewModel
-                LaunchedEffect(Unit) {
-                    aiManager.aiEvent.collect { event ->
-                        event?.let { viewModel.handleEvent(it) }
-                    }
-                }
-
-                RoboFaceScreen(
-                    viewModel = viewModel,
-                    tiltX = tiltX,
-                    tiltY = tiltY,
-                    aiStats = aiStats,
-                    modifier = Modifier.fillMaxSize()
-                )
             }
+
+            android.util.Log.d("RoboFaceAI", "✓ RoboFaceAI launched successfully!")
+            android.util.Log.d("RoboFaceAI", "🎯 All systems active: Sensors + AI + State Machine")
+        } catch (e: Exception) {
+            android.util.Log.e("RoboFaceAI", "✗ ERROR: ${e.message}", e)
+            e.printStackTrace()
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        sensorController.start()
-        aiManager.start()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        sensorController.stop()
-        aiManager.stop()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        aiManager.close()
+        android.util.Log.d("RoboFaceAI", "🛑 RoboFaceAI shutting down...")
     }
 }
-
-
-
 

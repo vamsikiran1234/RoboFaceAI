@@ -1,44 +1,119 @@
 package com.example.robofaceai.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.robofaceai.ai.AIManager
 import com.example.robofaceai.domain.RoboEvent
 import com.example.robofaceai.domain.RoboReducer
 import com.example.robofaceai.domain.RoboState
+import com.example.robofaceai.sensors.SensorController
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /**
- * ViewModel managing the Robo's state using MVVM + FSM architecture.
+ * TASK 2, 3, 6: Complete MVVM + FSM Architecture with Sensor Fusion & AI
  *
- * This is the bridge between:
- * - Domain logic (RoboReducer)
- * - UI (Compose screens)
- * - External inputs (Sensors, AI)
+ * This ViewModel is the orchestration layer that integrates:
+ * - Task 2: State machine for visual behavior
+ * - Task 3: Sensor fusion (tilt, shake, proximity)
+ * - Task 6: AI predictions
  *
- * All state changes go through handleEvent() which uses the pure reducer function.
+ * Architecture:
+ * - MVVM pattern (reactive StateFlows)
+ * - FSM pattern (pure state transitions via RoboReducer)
+ * - Sensor integration (SensorController)
+ * - AI integration (AIManager)
+ *
+ * All state changes flow through handleEvent() → RoboReducer → New State
  */
-class RoboViewModel : ViewModel() {
+class RoboViewModel(application: Application) : AndroidViewModel(application) {
 
-    // ========== STATE ==========
+    // ========== CORE STATE ==========
 
-    /**
-     * Current state of the Robo (private mutable version)
-     */
     private val _state = MutableStateFlow<RoboState>(RoboState.Idle)
-
-    /**
-     * Public read-only state flow for UI observation
-     */
     val state: StateFlow<RoboState> = _state.asStateFlow()
 
-    /**
-     * Current state name for debugging/display
-     */
-    val stateName: StateFlow<String> = MutableStateFlow(RoboReducer.getStateName(RoboState.Idle))
+    private val _stateName = MutableStateFlow(RoboReducer.getStateName(RoboState.Idle))
+    val stateName: StateFlow<String> = _stateName.asStateFlow()
+
+    // ========== TASK 3: SENSOR INTEGRATION ==========
+
+    private val sensorController = SensorController(application.applicationContext)
+
+    // Expose sensor values for UI (Task 3: Real-time interaction)
+    val tiltX: StateFlow<Float> = sensorController.tiltX
+    val tiltY: StateFlow<Float> = sensorController.tiltY
+    val headRotation: StateFlow<Float> = sensorController.headRotation
+
+    // ========== TASK 6: AI INTEGRATION ==========
+
+    private val aiManager = AIManager(application.applicationContext)
+
+    private val _aiStats = MutableStateFlow(AIManager.InferenceStats())
+    val aiStats: StateFlow<AIManager.InferenceStats> = _aiStats.asStateFlow()
+
+    // ========== LIFECYCLE & INITIALIZATION ==========
+
+    private var lastManualChangeTime = 0L
+    private val manualChangeLockDuration = 5000L
+
+    init {
+        android.util.Log.d("RoboViewModel", "🎯 Initializing RoboViewModel with full sensor fusion...")
+
+        // Initialize and start AI Manager
+        aiManager.initialize()
+        aiManager.start()
+
+        // Start sensors
+        sensorController.start()
+
+        // Connect sensor data callback to AI
+        sensorController.onSensorDataCallback = { x, y, z ->
+            aiManager.feedSensorData(x, y, z)
+        }
+
+        // Listen to sensor events and feed to state machine
+        viewModelScope.launch {
+            sensorController.roboEvent.collect { event ->
+                event?.let { handleEvent(it) }
+            }
+        }
+
+        // Listen to AI predictions
+        viewModelScope.launch {
+            aiManager.predictions.collect { prediction ->
+                _aiStats.value = aiManager.getStats()
+
+                // Feed AI predictions as events
+                if (prediction.isNotEmpty() && prediction != "unknown") {
+                    handleEvent(RoboEvent.AIResult(
+                        prediction = prediction,
+                        confidence = aiManager.getStats().confidence
+                    ))
+                }
+            }
+        }
+
+        // Log sensor availability
+        val (hasAccel, hasGyro, hasProx) = sensorController.areSensorsAvailable()
+        android.util.Log.d("RoboViewModel", """
+            📱 Sensor Availability:
+            ├─ Accelerometer: ${if (hasAccel) "✓" else "✗"}
+            ├─ Gyroscope: ${if (hasGyro) "✓" else "✗"}
+            └─ Proximity: ${if (hasProx) "✓" else "✗"}
+        """.trimIndent())
+
+        android.util.Log.d("RoboViewModel", "✓ RoboViewModel initialized successfully")
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        android.util.Log.d("RoboViewModel", "🛑 Cleaning up RoboViewModel...")
+        sensorController.stop()
+        aiManager.stop()
+    }
 
     // ========== STATE MANAGEMENT ==========
 
@@ -49,18 +124,27 @@ class RoboViewModel : ViewModel() {
      * @param event The event to process
      */
     fun handleEvent(event: RoboEvent) {
+        // Ignore AI events shortly after manual state change
+        if (event is RoboEvent.AIResult) {
+            val timeSinceManualChange = System.currentTimeMillis() - lastManualChangeTime
+            if (timeSinceManualChange < manualChangeLockDuration) {
+                return // Ignore AI event during manual lock period
+            }
+        }
+
         val newState = RoboReducer.reduce(_state.value, event)
 
         // Only update if state actually changed
         if (newState != _state.value) {
             _state.value = newState
-            (stateName as MutableStateFlow).value = RoboReducer.getStateName(newState)
+            _stateName.value = RoboReducer.getStateName(newState)
 
             // Start timeout timer when entering certain states
             when (newState) {
                 is RoboState.Angry -> startAngerTimeout()
-                is RoboState.Curious -> startIdleTimeout(15000) // 15 seconds
-                is RoboState.Happy -> startIdleTimeout(10000) // 10 seconds
+                // REMOVED: Automatic sleep timeouts that were causing issues
+                // is RoboState.Curious -> startIdleTimeout(15000)
+                // is RoboState.Happy -> startIdleTimeout(10000)
                 else -> {}
             }
         }
@@ -103,6 +187,7 @@ class RoboViewModel : ViewModel() {
      * Manually set state (for testing/demo purposes)
      */
     fun setStateManually(targetState: RoboState) {
+        lastManualChangeTime = System.currentTimeMillis()
         handleEvent(RoboEvent.ManualStateChange(targetState))
     }
 
