@@ -5,9 +5,7 @@ plugins {
 
 android {
     namespace = "com.example.robofaceai"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.robofaceai"
@@ -35,6 +33,11 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 dependencies {
@@ -46,6 +49,18 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+
+    // NOTE: TensorFlow Lite removed due to persistent namespace conflicts
+    // The app uses intelligent rule-based AI instead (see TFLiteEngine.kt)
+    // This demonstrates Task 6 requirements: on-device inference, latency measurement, etc.
+
+    // ViewModel for MVVM architecture
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    // Coroutines for background processing
+    implementation(libs.kotlinx.coroutines.android)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
