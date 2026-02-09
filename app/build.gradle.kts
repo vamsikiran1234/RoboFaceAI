@@ -54,9 +54,10 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // TensorFlow Lite Interpreter ONLY - Required for Task 6
-    // Using base library only to avoid namespace conflicts
+    // TensorFlow Lite for Task 6 - On-Device AI
     implementation("org.tensorflow:tensorflow-lite:2.13.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.13.0")  // GPU delegate
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4") // Support library
 
     // ViewModel for MVVM architecture
     implementation(libs.androidx.lifecycle.viewmodel.ktx)

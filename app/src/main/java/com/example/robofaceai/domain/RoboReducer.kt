@@ -17,18 +17,24 @@ object RoboReducer {
      * @return The new state after processing the event
      */
     fun reduce(currentState: RoboState, event: RoboEvent): RoboState {
+        // Log all events for debugging
+        android.util.Log.d("RoboReducer", "📥 Event received: ${event.javaClass.simpleName} | Current state: ${getStateName(currentState)}")
+
         return when (event) {
 
             // ========== PROXIMITY EVENTS (Highest Priority) ==========
             is RoboEvent.ProximityChanged -> {
                 if (event.isNear) {
                     // Hand close -> Sleep
+                    android.util.Log.d("RoboReducer", "😴 Proximity NEAR detected → Transitioning to SLEEP")
                     RoboState.Sleep
                 } else {
                     // Hand away -> Wake up to Curious
                     if (currentState is RoboState.Sleep) {
+                        android.util.Log.d("RoboReducer", "👁️ Proximity FAR detected from SLEEP → Transitioning to CURIOUS (wake up)")
                         RoboState.Curious
                     } else {
+                        android.util.Log.d("RoboReducer", "👁️ Proximity FAR detected (not sleeping) → Staying in ${getStateName(currentState)}")
                         currentState // Stay in current state if not sleeping
                     }
                 }
@@ -39,33 +45,36 @@ object RoboReducer {
                 if (currentState !is RoboState.Sleep) {
                     // High intensity shake -> Angry
                     if (event.intensity > 0.5f) {
+                        android.util.Log.d("RoboReducer", "😠 STRONG shake detected (intensity=${event.intensity}) → Transitioning to ANGRY")
                         RoboState.Angry
                     } else {
                         // Gentle shake -> Curious
+                        android.util.Log.d("RoboReducer", "🤔 Mild shake detected (intensity=${event.intensity}) → Transitioning to CURIOUS")
                         RoboState.Curious
                     }
                 } else {
+                    android.util.Log.d("RoboReducer", "😴 Shake detected but robot is SLEEPING → Ignoring")
                     currentState // Don't wake from sleep on shake
                 }
             }
 
             // ========== TILT EVENTS ==========
             is RoboEvent.TiltDetected -> {
-                if (currentState !is RoboState.Sleep && currentState !is RoboState.Angry) {
-                    // Tilt -> Curious (exploring)
+                // Only transition to Curious from Idle (not from Happy or Angry)
+                if (currentState is RoboState.Idle) {
                     RoboState.Curious
                 } else {
-                    currentState
+                    currentState // Keep current state
                 }
             }
 
             // ========== ROTATION EVENTS ==========
             is RoboEvent.RotationDetected -> {
-                // Rotation enhances tilt behavior
-                if (currentState !is RoboState.Sleep) {
+                // Only transition to Curious from Idle (not from Happy or Angry)
+                if (currentState is RoboState.Idle) {
                     RoboState.Curious
                 } else {
-                    currentState
+                    currentState // Keep current state
                 }
             }
 

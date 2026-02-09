@@ -54,10 +54,15 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
     private val _aiStats = MutableStateFlow(AIManager.InferenceStats())
     val aiStats: StateFlow<AIManager.InferenceStats> = _aiStats.asStateFlow()
 
+    // AI is controllable - disabled when user manually sets state
+    private val _isAIEnabled = MutableStateFlow(true)
+    val isAIEnabled: StateFlow<Boolean> = _isAIEnabled.asStateFlow()
+
     // ========== LIFECYCLE & INITIALIZATION ==========
 
     private var lastManualChangeTime = 0L
-    private val manualChangeLockDuration = 5000L
+    private var userHasManuallySetState = false // Track if user has taken manual control
+    private var angerTimeoutJob: kotlinx.coroutines.Job? = null
 
     init {
         android.util.Log.d("RoboViewModel", "🎯 Initializing RoboViewModel with full sensor fusion...")
@@ -124,20 +129,38 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
      * @param event The event to process
      */
     fun handleEvent(event: RoboEvent) {
-        // Ignore AI events shortly after manual state change
-        if (event is RoboEvent.AIResult) {
-            val timeSinceManualChange = System.currentTimeMillis() - lastManualChangeTime
-            if (timeSinceManualChange < manualChangeLockDuration) {
-                return // Ignore AI event during manual lock period
+        // CRITICAL FIX: Completely ignore AI when user has manually set state
+        // AI only re-enables when user physically interacts with phone (shake, tilt, proximity)
+        if (event is RoboEvent.AIResult && userHasManuallySetState) {
+            android.util.Log.v("RoboViewModel", "🚫 Ignoring AI event - user has manual control")
+            return
+        }
+
+        // Re-enable AI when user physically interacts with phone
+        if (event is RoboEvent.ShakeDetected ||
+            event is RoboEvent.TiltDetected ||
+            event is RoboEvent.RotationDetected ||
+            event is RoboEvent.ProximityChanged) {
+            if (userHasManuallySetState) {
+                userHasManuallySetState = false
+                _isAIEnabled.value = true
+                android.util.Log.i("RoboViewModel", "🎯 User interacted with phone - AI re-enabled")
             }
         }
+
+        android.util.Log.d("RoboViewModel", "🔄 Processing event: ${event.javaClass.simpleName}")
 
         val newState = RoboReducer.reduce(_state.value, event)
 
         // Only update if state actually changed
         if (newState != _state.value) {
+            val oldStateName = RoboReducer.getStateName(_state.value)
+            val newStateName = RoboReducer.getStateName(newState)
+
+            android.util.Log.d("RoboViewModel", "✅ STATE TRANSITION: $oldStateName → $newStateName")
+
             _state.value = newState
-            _stateName.value = RoboReducer.getStateName(newState)
+            _stateName.value = newStateName
 
             // Start timeout timer when entering certain states
             when (newState) {
@@ -147,6 +170,8 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
                 // is RoboState.Happy -> startIdleTimeout(10000)
                 else -> {}
             }
+        } else {
+            android.util.Log.d("RoboViewModel", "⏸️ No state change (already in ${RoboReducer.getStateName(_state.value)})")
         }
     }
 
@@ -159,11 +184,16 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * After being angry for a while, calm down to idle
+     * Increased to 30 seconds so users can actually see the angry state
      */
     private fun startAngerTimeout() {
-        viewModelScope.launch {
-            delay(5000) // 5 seconds of anger
+        // Cancel any previous anger timeout
+        angerTimeoutJob?.cancel()
+
+        angerTimeoutJob = viewModelScope.launch {
+            delay(30000) // 30 seconds of anger (was 5 seconds - too fast)
             if (_state.value is RoboState.Angry) {
+                android.util.Log.d("RoboViewModel", "⏱️ Anger timeout reached → Returning to Idle")
                 handleEvent(RoboEvent.IdleTimeout)
             }
         }
@@ -185,9 +215,16 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Manually set state (for testing/demo purposes)
+     * DISABLES AI until user physically interacts with phone
      */
     fun setStateManually(targetState: RoboState) {
         lastManualChangeTime = System.currentTimeMillis()
+        userHasManuallySetState = true
+        _isAIEnabled.value = false
+
+        val stateName = RoboReducer.getStateName(targetState)
+        android.util.Log.d("RoboViewModel",
+            "🔘 Manual button pressed: $stateName | AI DISABLED until physical interaction")
         handleEvent(RoboEvent.ManualStateChange(targetState))
     }
 

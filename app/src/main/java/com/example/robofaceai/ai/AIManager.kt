@@ -38,7 +38,9 @@ class AIManager(context: Context) {
         val prediction: String = "N/A",
         val confidence: Float = 0f,
         val isModelLoaded: Boolean = false,
-        val inferenceCount: Int = 0
+        val inferenceCount: Int = 0,
+        val acceleratorMode: String = "CPU",
+        val fps: Double = 0.0
     )
 
     private var inferenceJob: Job? = null
@@ -128,6 +130,9 @@ class AIManager(context: Context) {
         // Run intelligent rule-based inference
         val result = tfliteEngine.predict(data)
 
+        // Get performance stats from TFLite engine
+        val perfStats = tfliteEngine.getPerformanceStats()
+
         // Update stats
         val currentStats = _inferenceStats.value
         _inferenceStats.value = InferenceStats(
@@ -135,7 +140,9 @@ class AIManager(context: Context) {
             prediction = result.prediction,
             confidence = result.confidence,
             isModelLoaded = currentStats.isModelLoaded,
-            inferenceCount = currentStats.inferenceCount + 1
+            inferenceCount = currentStats.inferenceCount + 1,
+            acceleratorMode = result.acceleratorMode,
+            fps = perfStats.currentFps
         )
 
         // Emit prediction to flow

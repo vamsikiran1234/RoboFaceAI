@@ -78,16 +78,6 @@ fun RoboFaceScreen(
                 .padding(top = 32.dp, end = 16.dp)
         )
 
-        // === SENSOR DEBUG OVERLAY (Top Left) - Shows real-time sensor values ===
-        SensorDebugDisplay(
-            tiltX = tiltX,
-            tiltY = tiltY,
-            headRotation = headRotation,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 32.dp, start = 16.dp)
-        )
-
         // Test controls (bottom) - for development/demo
         TestControls(
             viewModel = vm,
@@ -99,24 +89,39 @@ fun RoboFaceScreen(
 }
 
 /**
- * Display current state name
+ * Display current state name (text only, no emoji)
  */
 @Composable
 private fun StateIndicator(
     stateName: String,
     modifier: Modifier = Modifier
 ) {
-    Text(
-        text = "State: $stateName",
-        color = Color.White,
-        fontSize = 24.sp,
-        fontWeight = FontWeight.Bold,
+    val color = when (stateName) {
+        "Sleep" -> Color(0xFF6495ED) // Blue
+        "Angry" -> Color(0xFFFF4444) // Red
+        "Happy" -> Color(0xFF4CAF50) // Green
+        "Curious" -> Color(0xFFFFEB3B) // Yellow
+        "Idle" -> Color.White
+        else -> Color.White
+    }
+
+    Box(
         modifier = modifier
-    )
+            .background(Color.Black.copy(alpha = 0.7f))
+            .padding(horizontal = 32.dp, vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "State: $stateName",
+            color = color,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
 
 /**
- * Display AI inference statistics
+ * Display AI inference statistics (Task 6 requirement)
  */
 @Composable
 private fun AIStatsDisplay(
@@ -130,17 +135,47 @@ private fun AIStatsDisplay(
         horizontalAlignment = Alignment.End
     ) {
         Text(
-            text = "AI STATS",
+            text = "🧠 AI ENGINE",
             color = Color.Cyan,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(4.dp))
+
+        // Accelerator mode
+        Text(
+            text = "Mode: ${stats.acceleratorMode}",
+            color = when (stats.acceleratorMode) {
+                "GPU" -> Color.Green
+                "NNAPI" -> Color.Yellow
+                else -> Color.White
+            },
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        // Latency
         Text(
             text = "Latency: ${stats.latencyMs}ms",
-            color = Color.White,
+            color = when {
+                stats.latencyMs < 10 -> Color.Green
+                stats.latencyMs < 50 -> Color.Yellow
+                else -> Color.Red
+            },
             fontSize = 12.sp
         )
+
+        // FPS
+        Text(
+            text = "FPS: ${"%.1f".format(stats.fps)}",
+            color = when {
+                stats.fps > 30 -> Color.Green
+                stats.fps > 10 -> Color.Yellow
+                else -> Color.Red
+            },
+            fontSize = 12.sp
+        )
+
         Text(
             text = "Prediction: ${stats.prediction}",
             color = Color.White,
@@ -148,18 +183,18 @@ private fun AIStatsDisplay(
         )
         Text(
             text = "Confidence: ${(stats.confidence * 100).toInt()}%",
-            color = Color.White,
+            color = if (stats.confidence > 0.7f) Color.Green else Color.Yellow,
             fontSize = 12.sp
         )
         Text(
             text = "Inferences: ${stats.inferenceCount}",
             color = Color.White,
-            fontSize = 12.sp
+            fontSize = 11.sp
         )
         Text(
-            text = "Engine: Rule-Based AI",
+            text = if (stats.isModelLoaded) "✓ TFLite Ready" else "Rule-Based AI",
             color = if (stats.isModelLoaded) Color.Green else Color.Cyan,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -182,7 +217,7 @@ private fun SensorDebugDisplay(
         horizontalAlignment = Alignment.Start
     ) {
         Text(
-            text = "SENSORS",
+            text = "SENSORS 📡",
             color = Color.Green,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
@@ -221,29 +256,57 @@ private fun TestControls(
     viewModel: RoboViewModel,
     modifier: Modifier = Modifier
 ) {
+    val isAIEnabled by viewModel.isAIEnabled.collectAsState()
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Dynamic AI status display
+        Text(
+            text = if (isAIEnabled) "🤖 AI: ACTIVE" else "🔘 MANUAL MODE",
+            color = if (isAIEnabled) Color(0xFF4CAF50) else Color(0xFFFFEB3B),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+        )
+
+        // State buttons - INCLUDING IDLE
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StateButton("Idle", RoboState.Idle, viewModel)
             StateButton("Curious", RoboState.Curious, viewModel)
-            StateButton("Happy", RoboState.Happy, viewModel)
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            StateButton("Happy", RoboState.Happy, viewModel)
             StateButton("Angry", RoboState.Angry, viewModel)
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             StateButton("Sleep", RoboState.Sleep, viewModel)
         }
+
+        // Cycle button
         Button(
             onClick = { viewModel.cycleStates() }
         ) {
             Text("Cycle All States")
         }
+
+        // Instructions
+        Text(
+            text = "💡 Cover top of phone for Sleep | Shake for Angry/Curious\n" +
+                   "🔘 Manual buttons disable AI until you move the phone",
+            color = Color(0xFFFFEB3B),
+            fontSize = 11.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
