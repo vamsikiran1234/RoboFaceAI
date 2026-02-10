@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.robofaceai.ai.AIManager
+import com.example.robofaceai.behavior.Task5BehaviorEngine
 import com.example.robofaceai.domain.RoboEvent
 import com.example.robofaceai.domain.RoboReducer
 import com.example.robofaceai.domain.RoboState
@@ -13,16 +14,17 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /**
- * TASK 2, 3, 6: Complete MVVM + FSM Architecture with Sensor Fusion & AI
+ * TASK 2, 5, 6: Complete MVVM + FSM Architecture with Behavior Engine & AI
  *
  * This ViewModel is the orchestration layer that integrates:
  * - Task 2: State machine for visual behavior
- * - Task 3: Sensor fusion (tilt, shake, proximity)
+ * - Task 5: Behavior engine (personality & reactions)
  * - Task 6: AI predictions
  *
  * Architecture:
  * - MVVM pattern (reactive StateFlows)
  * - FSM pattern (pure state transitions via RoboReducer)
+ * - Behavior Engine (Task5BehaviorEngine)
  * - Sensor integration (SensorController)
  * - AI integration (AIManager)
  *
@@ -37,6 +39,10 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _stateName = MutableStateFlow(RoboReducer.getStateName(RoboState.Idle))
     val stateName: StateFlow<String> = _stateName.asStateFlow()
+
+    // ========== TASK 5: BEHAVIOR ENGINE ==========
+
+    private val behaviorEngine = Task5BehaviorEngine(viewModelScope)
 
     // ========== TASK 3: SENSOR INTEGRATION ==========
 
@@ -65,7 +71,7 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
     private var angerTimeoutJob: kotlinx.coroutines.Job? = null
 
     init {
-        android.util.Log.d("RoboViewModel", "🎯 Initializing RoboViewModel with full sensor fusion...")
+        android.util.Log.d("RoboViewModel", "🎯 Initializing RoboViewModel with Behavior Engine...")
 
         // Initialize and start AI Manager
         aiManager.initialize()
@@ -73,6 +79,9 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
 
         // Start sensors
         sensorController.start()
+
+        // Start behavior engine (Task 5)
+        behaviorEngine.start()
 
         // Connect sensor data callback to AI
         sensorController.onSensorDataCallback = { x, y, z ->
@@ -82,15 +91,36 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
         // Listen to sensor events and feed to state machine
         viewModelScope.launch {
             sensorController.roboEvent.collect { event ->
+                event?.let {
+                    handleEvent(it)
+                    // Notify behavior engine about sensor activity
+                    when (it) {
+                        is RoboEvent.ShakeDetected,
+                        is RoboEvent.TiltDetected,
+                        is RoboEvent.RotationDetected -> behaviorEngine.onSensorActivity()
+                        else -> {}
+                    }
+                }
+            }
+        }
+
+        // Listen to behavior engine events
+        viewModelScope.launch {
+            behaviorEngine.behaviorEvent.collect { event ->
                 event?.let { handleEvent(it) }
+            }
+        }
+
+        // Listen to AI inference stats (real-time updates for UI)
+        viewModelScope.launch {
+            aiManager.inferenceStats.collect { stats ->
+                _aiStats.value = stats
             }
         }
 
         // Listen to AI predictions
         viewModelScope.launch {
             aiManager.predictions.collect { prediction ->
-                _aiStats.value = aiManager.getStats()
-
                 // Feed AI predictions as events
                 if (prediction.isNotEmpty() && prediction != "unknown") {
                     handleEvent(RoboEvent.AIResult(
@@ -102,12 +132,11 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Log sensor availability
-        val (hasAccel, hasGyro, hasProx) = sensorController.areSensorsAvailable()
+        val (hasAccel, hasGyro) = sensorController.areSensorsAvailable()
         android.util.Log.d("RoboViewModel", """
             📱 Sensor Availability:
             ├─ Accelerometer: ${if (hasAccel) "✓" else "✗"}
-            ├─ Gyroscope: ${if (hasGyro) "✓" else "✗"}
-            └─ Proximity: ${if (hasProx) "✓" else "✗"}
+            └─ Gyroscope: ${if (hasGyro) "✓" else "✗"}
         """.trimIndent())
 
         android.util.Log.d("RoboViewModel", "✓ RoboViewModel initialized successfully")
@@ -117,6 +146,7 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         android.util.Log.d("RoboViewModel", "🛑 Cleaning up RoboViewModel...")
         sensorController.stop()
+        behaviorEngine.stop()
         aiManager.stop()
     }
 
@@ -139,8 +169,7 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
         // Re-enable AI when user physically interacts with phone
         if (event is RoboEvent.ShakeDetected ||
             event is RoboEvent.TiltDetected ||
-            event is RoboEvent.RotationDetected ||
-            event is RoboEvent.ProximityChanged) {
+            event is RoboEvent.RotationDetected) {
             if (userHasManuallySetState) {
                 userHasManuallySetState = false
                 _isAIEnabled.value = true
@@ -161,6 +190,9 @@ class RoboViewModel(application: Application) : AndroidViewModel(application) {
 
             _state.value = newState
             _stateName.value = newStateName
+
+            // Notify behavior engine of state change
+            behaviorEngine.onStateChanged(newState)
 
             // Start timeout timer when entering certain states
             when (newState) {
