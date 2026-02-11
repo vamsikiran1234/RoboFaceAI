@@ -184,7 +184,7 @@ Built for Android internship selection, demonstrating expertise in graphics prog
 
 ### Video Demo
 
-📹 **Screen Recording Link** - Full feature demonstration
+📹 **Screen Recording Link** -  https://drive.google.com/file/d/1GY_-KX5veAVWnhD9Pkyt80U4K8n8xc3c/view?usp=sharing
 
 ---
 
